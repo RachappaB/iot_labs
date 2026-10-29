@@ -1,0 +1,319 @@
+from pathlib import Path
+
+content = r"""MOSQUITTO MQTT BROKER SETUP GUIDE
+Windows Laptop - Shared Laboratory MQTT Server
+================================================
+
+PURPOSE
+-------
+This guide sets up Eclipse Mosquitto on a Windows laptop as a shared MQTT
+broker for devices on a trusted laboratory network.
+
+Configuration:
+- Broker: Eclipse Mosquitto
+- Protocol: MQTT over TCP
+- Port: 1883
+- Authentication: Disabled (anonymous connections allowed)
+- Clients: Windows, Kali Linux, ESP32, Python, MQTT Explorer, etc.
+- Network: Same trusted Wi-Fi or LAN
+
+IMPORTANT SECURITY WARNING
+-------------------------
+This setup does not require a username or password. Anyone who can reach
+port 1883 on the broker laptop may be able to publish messages, subscribe
+to topics, or interfere with lab experiments.
+
+Use this only on a trusted, isolated lab network. Do not expose port 1883
+to the public internet, do not create router port-forwarding rules for it,
+and do not enable the firewall rule on Public networks.
+
+PART 1 - INSTALL MOSQUITTO
+--------------------------
+1. Download Mosquitto for Windows from the official website:
+   https://mosquitto.org/download/
+
+2. Run the Windows installer. For most modern Windows laptops, select the
+   64-bit installer.
+
+3. The default installation directory is usually:
+   C:\Program Files\mosquitto
+
+4. Open PowerShell and run:
+
+   cd "C:\Program Files\mosquitto"
+   .\mosquitto.exe -h
+
+   NOTE: In PowerShell, use .\ before an executable in the current folder.
+   Paths containing spaces must be enclosed in quotation marks.
+
+If the help text appears, the executable is available.
+
+PART 2 - CREATE A DATA DIRECTORY
+--------------------------------
+Open PowerShell as Administrator and run:
+
+   New-Item -ItemType Directory -Force -Path C:\mosquitto-data
+
+This directory will hold persistent broker data.
+
+PART 3 - CONFIGURE THE BROKER FOR ANONYMOUS LAB ACCESS
+------------------------------------------------------
+1. Open the configuration file:
+
+   notepad "C:\Program Files\mosquitto\mosquitto.conf"
+
+2. Before editing, make a backup from PowerShell:
+
+   Copy-Item "C:\Program Files\mosquitto\mosquitto.conf" `
+     "C:\Program Files\mosquitto\mosquitto.conf.backup"
+
+   If a backup already exists, choose another backup filename or confirm
+   that overwriting it is intended.
+
+3. Add the following settings to the configuration file:
+
+   # Shared MQTT laboratory broker - anonymous access
+   listener 1883 0.0.0.0
+   allow_anonymous true
+   persistence true
+   persistence_location C:/mosquitto-data/
+
+4. Save the file.
+
+IMPORTANT CONFIGURATION NOTES:
+- If the file already contains an active listener on port 1883, modify that
+  existing listener rather than adding a duplicate.
+- Ensure there is no active password_file setting being used for this
+  listener if you intend to run this simple anonymous configuration.
+- Other active listener or authentication settings in the file can affect
+  the result. If startup fails, read the error printed by Mosquitto.
+- Do not delete unrelated configuration unless you know it is safe to do so.
+
+PART 4 - ALLOW MQTT THROUGH WINDOWS FIREWALL
+--------------------------------------------
+Open PowerShell as Administrator and run:
+
+   New-NetFirewallRule `
+     -DisplayName "Mosquitto MQTT Lab - Private Network" `
+     -Direction Inbound `
+     -Protocol TCP `
+     -LocalPort 1883 `
+     -Action Allow `
+     -Profile Private
+
+This rule applies only when Windows classifies the network as Private.
+Use the Private profile only for a trusted laboratory network. Do not
+enable this rule for Public networks.
+
+If Windows reports that a rule with this name already exists, inspect it
+instead of repeatedly creating duplicate rules.
+
+PART 5 - START THE BROKER MANUALLY
+----------------------------------
+Open PowerShell. Run:
+
+   cd "C:\Program Files\mosquitto"
+   .\mosquitto.exe -c "C:\Program Files\mosquitto\mosquitto.conf" -v
+
+Keep this terminal open. The broker runs while this process remains active.
+Press Ctrl+C to stop it.
+
+If startup reports that port 1883 is already in use, another broker or
+service may already be running. Do not start a second broker on the same
+port; check the service in Part 9.
+
+PART 6 - FIND THE BROKER LAPTOP'S IP ADDRESS
+--------------------------------------------
+On the Windows laptop running Mosquitto, open another PowerShell or
+Command Prompt window and run:
+
+   ipconfig
+
+Find the IPv4 Address under the Wi-Fi or Ethernet adapter currently used
+for the laboratory network.
+
+Example only:
+   IPv4 Address: 192.168.1.105
+
+Use the actual address shown on your laptop. The example above is not a
+guaranteed address.
+
+Other devices must use this LAN IPv4 address as the broker host. Do not
+use 127.0.0.1 or localhost on another computer; those refer to that
+other device itself.
+
+PART 7 - CHECK THAT THE BROKER IS LISTENING
+-------------------------------------------
+Run in PowerShell:
+
+   Get-NetTCPConnection -LocalPort 1883 -State Listen
+
+If the command returns a listening connection, a process is listening on
+port 1883. If it returns nothing or an error, check that Mosquitto started
+successfully and that no configuration error was printed.
+
+PART 8 - TEST MQTT ON THE BROKER LAPTOP
+---------------------------------------
+Open two PowerShell windows.
+
+WINDOW A - Subscribe:
+   cd "C:\Program Files\mosquitto"
+   .\mosquitto_sub.exe -h 127.0.0.1 -p 1883 -t "lab/test" -v
+
+WINDOW B - Publish:
+   cd "C:\Program Files\mosquitto"
+   .\mosquitto_pub.exe -h 127.0.0.1 -p 1883 -t "lab/test" -m "Hello from the MQTT lab"
+
+The subscriber should display:
+   lab/test Hello from the MQTT lab
+
+Press Ctrl+C in the subscriber window when you want to stop it.
+
+PART 9 - CONNECT FROM ANOTHER WINDOWS COMPUTER
+-----------------------------------------------
+Install the Mosquitto client tools on the other computer, or use a suitable
+MQTT client application.
+
+Replace 192.168.1.105 below with the broker laptop's actual IPv4 address.
+
+SUBSCRIBE:
+   .\mosquitto_sub.exe -h 192.168.1.105 -p 1883 -t "lab/#" -v
+
+PUBLISH from another terminal:
+   .\mosquitto_pub.exe -h 192.168.1.105 -p 1883 -t "lab/test" -m "Hello from another laptop"
+
+No username or password arguments are needed for this configuration.
+
+The topic "lab/#" receives messages published to topics beginning with
+"lab/", such as "lab/test" and "lab/esp32/status".
+
+Optional network test from the client laptop (PowerShell):
+   Test-NetConnection 192.168.1.105 -Port 1883
+
+TcpTestSucceeded : True means the TCP connection succeeded. It does not
+by itself prove that MQTT publishing/subscribing is working.
+
+PART 10 - CONNECT AN ESP32
+--------------------------
+In the ESP32 Arduino sketch, configure the broker address and port:
+
+   const char* mqtt_server = "192.168.1.105";
+   const int mqtt_port = 1883;
+
+Replace the example IP with the broker laptop's actual IPv4 address.
+
+With the PubSubClient library, the core setup is:
+
+   client.setServer(mqtt_server, mqtt_port);
+
+   if (client.connect("ESP32_Lab_01")) {
+       client.publish("lab/esp32/status", "ESP32 connected");
+   }
+
+This snippet assumes Wi-Fi and the MQTT client have already been initialized.
+Your sketch should also handle reconnecting if Wi-Fi or MQTT disconnects.
+
+Do not use 127.0.0.1 as the broker address on an ESP32. It would refer to
+the ESP32 itself, not the Windows laptop.
+
+PART 11 - KEEP THE BROKER RUNNING
+---------------------------------
+MANUAL MODE:
+- Keep the PowerShell window running the mosquitto.exe command open.
+- If the window is closed or the process stops, the broker stops.
+- Restart it with the command in Part 5.
+
+AUTOMATIC WINDOWS SERVICE:
+- First check whether a Mosquitto service already exists. Run PowerShell
+  as Administrator:
+
+    Get-Service *mosquitto*
+
+- If a service exists, confirm that it uses the intended configuration
+  file before restarting it. Avoid running both a service and a manual
+  broker on port 1883.
+- If no service exists, follow the official Mosquitto Windows instructions
+  for installing the service:
+  https://github.com/eclipse-mosquitto/mosquitto/blob/master/README-windows.txt
+
+- After service setup, check its status with Get-Service and verify that
+  port 1883 is listening. Service installation details can vary by installer
+  version, so do not assume the service is configured correctly until tested.
+
+A Windows service can start the broker when Windows starts, but the laptop
+must remain powered on and connected to the network for students to use it.
+Check sleep and power settings if the broker must stay available during a lab.
+
+PART 12 - TROUBLESHOOTING
+-------------------------
+1. "The term mosquitto.exe is not recognized"
+   Use:
+     cd "C:\Program Files\mosquitto"
+     .\mosquitto.exe -h
+
+2. "Address already in use" / port 1883 bind error
+   Another broker or process may be using the port. Check:
+     Get-NetTCPConnection -LocalPort 1883 -State Listen
+   Check the Mosquitto service before starting another broker.
+
+3. Client cannot connect
+   - Confirm Mosquitto is running.
+   - Confirm the client is using the broker laptop's current IPv4 address.
+   - Confirm port 1883 is listening.
+   - Confirm the Private-profile firewall rule exists and the network is
+     classified as Private.
+   - Confirm all devices can communicate on the same LAN.
+   - Some campus or guest Wi-Fi networks enable client isolation, which
+     blocks device-to-device connections. Ask the network administrator
+     for a suitable lab network if needed.
+
+4. Local test works but remote devices fail
+   Check Windows Firewall, the IP address, and Wi-Fi client isolation.
+   Do not solve this by exposing port 1883 to the public internet.
+
+5. Broker reports configuration errors
+   Review the error output. Check for duplicate listener directives,
+   conflicting authentication settings, invalid paths, or a port conflict.
+
+6. IP address changes
+   The broker laptop's DHCP address may change. Update client configurations
+   or ask the network administrator to reserve an address for the laptop.
+
+QUICK REFERENCE
+---------------
+Broker host:       <BROKER_LAPTOP_IPV4>
+MQTT port:         1883
+Authentication:    Anonymous (no username/password)
+Example topic:     lab/test
+Subscriber topic:  lab/#
+
+Local subscribe:
+   .\mosquitto_sub.exe -h 127.0.0.1 -p 1883 -t "lab/test" -v
+
+Local publish:
+   .\mosquitto_pub.exe -h 127.0.0.1 -p 1883 -t "lab/test" -m "Hello MQTT"
+
+Remote subscribe:
+   .\mosquitto_sub.exe -h <BROKER_LAPTOP_IPV4> -p 1883 -t "lab/#" -v
+
+Remote publish:
+   .\mosquitto_pub.exe -h <BROKER_LAPTOP_IPV4> -p 1883 -t "lab/test" -m "Hello from a client"
+
+Replace <BROKER_LAPTOP_IPV4> with the actual IP address. Do not type the
+angle brackets as part of the address.
+
+OFFICIAL RESOURCES
+------------------
+Mosquitto downloads:
+https://mosquitto.org/download/
+
+Mosquitto Windows instructions:
+https://github.com/eclipse-mosquitto/mosquitto/blob/master/README-windows.txt
+
+END OF GUIDE
+============
+"""
+
+path = Path("/mnt/data/Mosquitto_MQTT_Lab_Setup_Windows.txt")
+path.write_text(content, encoding="utf-8")
+print(f"Created: {path}")
