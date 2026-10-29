@@ -1,0 +1,163 @@
+# IoT Lab User Guide
+## Connecting to Wi-Fi and Receiving MQTT Messages
+
+### 1. Objective
+
+To connect a computer to the designated Wi-Fi network, configure the MQTT client, connect to the MQTT broker, and receive IoT sensor messages using the Mosquitto MQTT client.
+
+### 2. Requirements
+
+- A laptop or desktop running Windows 10/11.
+- Wi-Fi network name (SSID) and password provided by the lab instructor.
+- MQTT broker IP address: `192.168.1.121`
+- MQTT port: `1883`
+- MQTT topic: `iotlab/b07/#`
+- Mosquitto MQTT client installed on the computer.
+
+### 3. Step 1: Connect to the Wi-Fi network
+
+1. Turn on Wi-Fi on your computer.
+2. Click the Wi-Fi icon in the Windows taskbar.
+3. Select the Wi-Fi network name provided by the instructor.
+4. Enter the Wi-Fi password.
+5. Wait until Windows displays **Connected**.
+
+**Important:** The computer and MQTT broker must be connected to the same local network, or the network must be configured to allow communication between them.
+
+### 4. Step 2: Verify the network connection
+
+1. Open the Start menu.
+2. Search for `PowerShell`.
+3. Open Windows PowerShell.
+4. Run the following command:
+
+```powershell
+ping 192.168.1.121
+```
+
+Expected result:
+
+```text
+Reply from 192.168.1.121: bytes=32 time=...
+```
+
+If replies are received, the broker's IP address is reachable. If the ping fails, check the Wi-Fi connection, IP address, and network configuration.
+
+### 5. Step 3: Verify Mosquitto installation
+
+Check whether the Mosquitto installation directory exists:
+
+```powershell
+Get-ChildItem "C:\Program Files\mosquitto"
+```
+
+Confirm that the following file is present:
+
+```text
+mosquitto_sub.exe
+```
+
+Test the MQTT subscriber client:
+
+```powershell
+& "C:\Program Files\mosquitto\mosquitto_sub.exe" --help
+```
+
+If help information appears, the subscriber client is available.
+
+If the directory or executable is missing, install the Windows version of Mosquitto from the official website:
+
+https://mosquitto.org/download/
+
+### 6. Step 4: Check MQTT broker connectivity
+
+Run:
+
+```powershell
+Test-NetConnection 192.168.1.121 -Port 1883
+```
+
+Look for this output:
+
+```text
+TcpTestSucceeded : True
+```
+
+If the result is `True`, the TCP port is reachable. If it is `False`, contact the instructor or administrator to verify that the MQTT broker is running and accepting connections on port 1883.
+
+### 7. Step 5: Connect to the MQTT broker
+
+Copy and run this command in PowerShell:
+
+```powershell
+& "C:\Program Files\mosquitto\mosquitto_sub.exe" -h 192.168.1.121 -p 1883 -t "iotlab/b07/#" -v
+```
+
+Explanation of the command:
+
+- `mosquitto_sub.exe` — starts the MQTT subscriber.
+- `-h 192.168.1.121` — specifies the MQTT broker IP address.
+- `-p 1883` — specifies the MQTT port.
+- `-t "iotlab/b07/#"` — subscribes to all topics under `iotlab/b07/`.
+- `-v` — displays the topic name alongside each message.
+
+If the broker requires authentication, use the username and password provided by the instructor. Do not share credentials with other users.
+
+### 8. Step 6: Receive sensor messages
+
+After successfully connecting, leave the PowerShell window open.
+
+When a device publishes a message to a matching topic, output may look like this:
+
+```text
+iotlab/b07/temperature 28.5
+iotlab/b07/humidity 62
+iotlab/b07/status online
+```
+
+These are example messages only. Actual messages depend on the sensors, devices, and topics configured in the lab.
+
+If no messages appear, the subscriber may still be connected. Check whether the publisher is running and publishing to the correct topic.
+
+### 9. Step 7: Disconnect from MQTT
+
+To stop receiving messages, press:
+
+```text
+Ctrl + C
+```
+
+This stops the subscriber process.
+
+### 10. Troubleshooting
+
+| Problem | Action |
+|---|---|
+| Wi-Fi does not connect | Verify the SSID and password with the instructor. |
+| Ping fails | Check the IP address and local network connectivity. |
+| `mosquitto_sub` is not recognized | Use the full executable path shown in Step 5. |
+| TCP port test fails | Ask the administrator to verify the broker service and firewall. |
+| Connection refused | Confirm the broker is running and listening on port 1883. |
+| Not authorized | Verify the MQTT credentials and topic permissions. |
+| No messages appear | Check the publisher, topic name, and whether messages are being sent. |
+
+### 11. Expected Outcome
+
+At the end of this exercise, each user should be able to:
+
+1. Connect to the designated Wi-Fi network.
+2. Verify connectivity to the MQTT broker.
+3. Test the MQTT service port.
+4. Subscribe to the assigned MQTT topic.
+5. View incoming IoT messages in PowerShell.
+6. Disconnect safely from the MQTT session.
+
+**Lab configuration**
+
+- Broker IP: `192.168.1.121`
+- Port: `1883`
+- Assigned topic: `iotlab/b07/#`
+- Client: Mosquitto MQTT Subscriber
+- Operating system: Windows 10/11
+
+**Security note:** Use only the Wi-Fi credentials and MQTT access details authorized for the lab. Do not expose the broker to the public internet without appropriate security controls.
